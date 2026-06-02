@@ -24,21 +24,34 @@ def iter_objects(kind="axons", data_dir=None):
             yield int(sid), verts[offs[k]:offs[k + 1]].astype(np.float64) * UM
 
 
-def load_crop(kind="axons", crop_um=20.0, min_pts=50, data_dir=None):
-    """Objects with >= min_pts vertices inside a central lateral crop.
+def voxel_downsample(v_um, ds_um):
+    """Reduce a point set to one representative per ds_um voxel (uniform thinning)."""
+    cells = np.unique(np.floor(v_um / ds_um).astype(np.int64), axis=0)
+    return (cells + 0.5) * ds_um
 
-    Returns (axons, lo_xy, hi_xy) where axons is a list of (id, verts_um) holding
-    only the in-crop vertices.
+
+def load_fov(kind="axons", fov_xy_um=30.0, fov_z_um=19.0, min_pts=50, data_dir=None):
+    """Objects with >= min_pts vertices inside a 3D FOV box centered in the volume.
+
+    Returns (objects, origin_xyz, fov_xyz) where objects is a list of
+    (id, verts_um) holding only the in-box vertices, origin is the box min corner,
+    and fov_xyz = (fov_xy, fov_xy, fov_z).
     """
+    mn = np.array([np.inf] * 3)
+    mx = np.array([-np.inf] * 3)
     sx = sy = n = 0.0
     for _, v in iter_objects(kind, data_dir):
+        mn = np.minimum(mn, v.min(0))
+        mx = np.maximum(mx, v.max(0))
         sx += v[:, 0].sum(); sy += v[:, 1].sum(); n += v.shape[0]
     cx, cy = sx / n, sy / n
-    lo = np.array([cx - crop_um / 2, cy - crop_um / 2])
-    hi = lo + crop_um
+    zc = 0.5 * (mn[2] + mx[2])
+    fov = np.array([fov_xy_um, fov_xy_um, fov_z_um])
+    origin = np.array([cx - fov_xy_um / 2, cy - fov_xy_um / 2, zc - fov_z_um / 2])
+    hi = origin + fov
     out = []
     for sid, v in iter_objects(kind, data_dir):
-        m = (v[:, 0] >= lo[0]) & (v[:, 0] < hi[0]) & (v[:, 1] >= lo[1]) & (v[:, 1] < hi[1])
+        m = np.all((v >= origin) & (v < hi), axis=1)
         if m.sum() >= min_pts:
             out.append((sid, v[m]))
-    return out, lo, hi
+    return out, origin, fov

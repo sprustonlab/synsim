@@ -35,15 +35,19 @@ becomes a number.
   dropped by **walking the skeleton** (MST + DFS, branch-aware) every `bouton_spacing_um`
   +/- `bouton_jitter`. Default spacing 4.3 um reproduces the LICONN density
   (0.95 pre/um^3 / 4.084 um-length/um^3 = 0.233 syn/um); spacing is a GUI knob.
-- **Imaging one plane (`synsim.imaging.footprint`):** detected image at depth `z0` =
-  labeled signal axially weighted by the PSF around z0, summed in z, lateral-blurred.
-  Validated == a true 3D-convolution optical section (Pearson r = 0.996), so the fast
-  2D point model is used.
-- **Metric (`synsim.metrics`):** a bouton is **detected** if its parent's axial PSF
-  weight at z0 > `axial_detect`, and **resolvable** if the parent axon supplies
-  > `purity_thresh` of the signal at its pixel. Headline outputs: detected count,
-  resolvable count, resolvable fraction; yield = labeled axons; the trade-off curve is
-  resolvable-vs-density.
+- **FOV + edge exclusion:** imaging is restricted to a box `fov_xy_um` x `fov_xy_um`
+  x `fov_z_um`. Boutons within `edge_xy_um` / `edge_z_um` of the boundary are NOT scored
+  (their PSF neighborhood would be truncated by the FOV); axons in that margin still
+  contribute signal, so interior boutons see their true neighborhood.
+- **Imaging one central plane (`synsim.metrics`):** a single optical section at the FOV
+  center in z. Each interior bouton is read at that plane: the signal is evaluated at
+  (x_bouton, y_bouton, z_center) - lateral at the bouton, axial at the focal plane - so a
+  bouton off the central plane is defocused, as in a real single-plane acquisition.
+- **Metric (gridless):** a bouton is **resolvable** if its parent axon supplies
+  > `purity_thresh` of the PSF-weighted signal at its plane location. Computed by scaling
+  coordinates so the PSF is isotropic, KD-tree over labeled axon points, summing
+  exp(-d^2/2) over neighbors within 3 sigma (parent vs. total). Every interior bouton is
+  scored; yield = labeled axons; the trade-off curve is resolvable-vs-density.
 
 ## Synapse ground truth (we generate it; not in the public data)
 
@@ -80,15 +84,16 @@ count; the overlap question reduces to axon separability.
 | Labeling | **Labeling density** | 0–1 (0.20) | which axons fluoresce → 1,3,4 |
 | Synapses | **Bouton spacing (um)** | 1.0–10.0 (4.3) | synapse density → 1,3,4 |
 | Synapses | **Spacing jitter** | 0–0.5 (0.20) | placement regularity → 1 |
-| Volume | **Crop size (um)** | 5–60 (20) | imaged field size → 1,3 |
-| Imaging | **Pixel size (um)** | 0.05–0.5 (0.15) | image sampling → 1 |
-| Imaging | **Imaging plane z0 (um)** | null=densest, 0–20 | which optical section → 1,2 |
-| Metric | **Axial detect threshold** | 0.1–1.0 (0.50) | optical-section thickness → 1,3,4 |
+| Field of view | **FOV lateral xy (um)** | 5–68 (30) | imaged box (xy) → 1,3 |
+| Field of view | **FOV axial z (um)** | 2–19 (19) | imaged box depth → 1,2,3 |
+| Field of view | **Exclude edge xy (um)** | 0–15 (3) | drop boundary boutons → 3,4 |
+| Field of view | **Exclude edge z (um)** | 0–15 (5) | drop boundary boutons → 3,4 |
+| Imaging | **Pixel size (um)** | 0.05–0.5 (0.15) | display section sampling → 1 |
 | Metric | **Purity threshold** | 0.5–1.0 (0.70) | resolvable cutoff → 1,3,4 |
 
-Cheap controls (axial_detect, purity_thresh) re-score an already-computed image instantly;
-the rest trigger a re-image. A small **"Experiment context"** group will be added for the
-readout scaling (P_connect 0.10/0.20/0.25; cells/cohort) — annotation only, not physics.
+Imaging is a **single optical section at the FOV center in z**; boutons off that plane are
+defocused. A small **"Experiment context"** group will be added for the readout scaling
+(P_connect 0.10/0.20/0.25; cells/cohort) — annotation only, not physics.
 
 ### Panels
 

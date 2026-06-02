@@ -6,13 +6,11 @@ unit, group) so a front-end can build sliders directly from `ui_spec()`, and
 `to_dict`/`from_dict` give a clean JSON round-trip with the browser.
 """
 from dataclasses import dataclass, field, asdict, fields
-from typing import Optional
 
 
-def _f(default, label, lo, hi, step, unit, group, desc, nullable=False):
+def _f(default, label, lo, hi, step, unit, group, desc):
     return field(default=default, metadata=dict(
-        label=label, min=lo, max=hi, step=step, unit=unit, group=group,
-        desc=desc, nullable=nullable))
+        label=label, min=lo, max=hi, step=step, unit=unit, group=group, desc=desc))
 
 
 @dataclass
@@ -25,23 +23,25 @@ class SimParams:
                         "Fraction of axons fluorescently labeled.")
     # --- Synapses ---
     bouton_spacing_um: float = _f(4.3, "Mean bouton spacing", 1.0, 10.0, 0.1, "um", "Synapses",
-                                  "Calibrated 4.3 um -> 0.23 synapses/um (LICONN).")
+                                  "Sets synapse density; 4.3 um -> 0.23 syn/um (LICONN).")
     bouton_jitter: float = _f(0.2, "Spacing jitter", 0.0, 0.5, 0.05, "fraction", "Synapses",
                               "Random +/- fraction of spacing along the skeleton.")
-    # --- Volume / imaging ---
-    crop_um: float = _f(20.0, "Crop size", 5.0, 60.0, 1.0, "um", "Volume",
-                        "Lateral side of the simulated imaging field.")
+    # --- Field of view (the imaged volume) ---
+    fov_xy_um: float = _f(30.0, "FOV lateral (xy)", 5.0, 68.0, 1.0, "um", "Field of view",
+                          "Lateral side of the imaged box.")
+    fov_z_um: float = _f(19.0, "FOV axial (z)", 2.0, 19.0, 0.5, "um", "Field of view",
+                         "Axial depth of the imaged box (LICONN volume is ~19 um deep).")
+    edge_xy_um: float = _f(3.0, "Exclude edge (xy)", 0.0, 15.0, 0.5, "um", "Field of view",
+                           "Don't score boutons within this xy margin (truncated PSF neighborhood).")
+    edge_z_um: float = _f(5.0, "Exclude edge (z)", 0.0, 15.0, 0.5, "um", "Field of view",
+                          "Don't score boutons within this z margin (axial PSF is large).")
+    # --- Imaging ---
     pix_um: float = _f(0.15, "Pixel size", 0.05, 0.5, 0.05, "um", "Imaging",
-                       "Sim image pixel size.")
-    z0_um: Optional[float] = _f(None, "Imaging plane z0", 0.0, 20.0, 0.5, "um", "Imaging",
-                                "Depth of the imaged plane; null = densest bouton plane.",
-                                nullable=True)
-    # --- Metric thresholds ---
-    axial_detect: float = _f(0.5, "Axial detection threshold", 0.1, 1.0, 0.05, "", "Metric",
-                             "Bouton is in the optical section if axial PSF weight > this.")
+                       "Sim image pixel size (display sections only).")
+    # --- Metric ---
     purity_thresh: float = _f(0.70, "Resolvability purity threshold", 0.5, 1.0, 0.05, "fraction",
                               "Metric",
-                              "Parent axon must exceed this fraction of the pixel signal.")
+                              "Parent axon must supply > this fraction of the 3D signal at the bouton.")
 
     def to_dict(self):
         return asdict(self)
@@ -56,8 +56,8 @@ DEFAULTS = SimParams()
 
 
 def ui_spec():
-    """List of {name, value, label, min, max, step, unit, group, desc, nullable}
-    for every knob - directly consumable by a front-end to build controls."""
+    """List of {name, value, label, min, max, step, unit, group, desc} for every
+    knob - directly consumable by a front-end to build controls."""
     d = DEFAULTS
     return [dict(name=f.name, value=getattr(d, f.name), **f.metadata)
             for f in fields(SimParams)]
