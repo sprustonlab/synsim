@@ -1,0 +1,23 @@
+# Large regenerable data caches (extracted LICONN meshes)
+data/
+
+# Isolated uv environment
+.venv-liconn/
+.venv/
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tooling / session state
+.operon/
+.claude/
