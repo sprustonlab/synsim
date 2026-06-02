@@ -44,7 +44,8 @@ class SimParams:
     # --- Metric ---
     purity_thresh: float = _f(0.70, "Resolvability purity threshold", 0.5, 1.0, 0.05, "fraction",
                               "Metric",
-                              "Parent axon must supply > this fraction of the 3D signal at the bouton.")
+                              "Parent axon's own bouton(s) must supply > this fraction of the bouton "
+                              "signal at the focal plane (i.e. no other axon's bouton in the resolved spot).")
 
     def to_dict(self):
         return asdict(self)

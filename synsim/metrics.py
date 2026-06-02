@@ -1,16 +1,22 @@
 """Resolvability metric: gridless, per-bouton, in 3D.
 
-We image a SINGLE optical section (plane) at the center of the FOV in z. Every
-labeled bouton inside the FOV interior (FOV minus edge margins) is read at that
-plane: the contribution sum is evaluated at (x_bouton, y_bouton, z_center) -
-lateral at the bouton (the plane is scanned in xy), axial at the focal plane (so
-a bouton away from the central plane is defocused, as in a real acquisition).
-The parent axon is resolvable there if it supplies more than `purity_thresh` of
-the PSF-weighted signal at that plane location.
+The axons flash (GCaMP), so what matters for assigning a synapse to a
+presynaptic axon is whether MORE THAN ONE BOUTON sits in the same resolved spot -
+not how much axon membrane is nearby. The emitters are therefore the BOUTONS
+(each tagged by its parent axon), not the axon membrane.
+
+We image a SINGLE optical section at the center of the FOV in z. Every labeled
+bouton inside the FOV interior (FOV minus edge margins) is read at that plane:
+the bouton-signal is evaluated at (x_bouton, y_bouton, z_center) - lateral at the
+bouton, axial at the focal plane (so a bouton off the central plane is defocused).
+A bouton is RESOLVABLE if its parent axon's own bouton(s) supply more than
+`purity_thresh` of the PSF-weighted bouton-signal there, i.e. no other axon's
+bouton falls within the resolved spot.
 
 Implementation: scale coordinates by (1/sigma_xy, 1/sigma_xy, 1/sigma_z) so the
-PSF is isotropic, build a KD-tree over labeled axon points, and for each bouton
-sum exp(-d^2/2) over neighbors within 3 sigma, splitting parent vs. total.
+PSF is isotropic, build a KD-tree over labeled BOUTONS, and for each scored
+bouton sum exp(-d^2/2) over neighbors within 3 sigma, splitting same-axon (parent)
+vs. all boutons.
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -28,12 +34,12 @@ def evaluate(scene, labeled_mask, params):
     s_xy, s_z = psf_sigmas_um(params.na)
     scale = np.array([1.0 / s_xy, 1.0 / s_xy, 1.0 / s_z])
 
-    # fluorescent point cloud of labeled axons (scaled), tagged by axon index
+    # emitter point cloud = all labeled BOUTONS (scaled), tagged by parent axon
     pts, tags = [], []
     for i, (sid, v, b) in enumerate(scene.axons):
-        if labeled_mask[i]:
-            pts.append(v * scale)
-            tags.append(np.full(len(v), i))
+        if labeled_mask[i] and len(b):
+            pts.append(b * scale)
+            tags.append(np.full(len(b), i))
     empty = dict(labeled_axons=int(np.sum(labeled_mask)), scored=0, resolvable=0,
                  resolvable_frac=float("nan"), positions=np.zeros((0, 3)),
                  purity=np.zeros(0), resolved=np.zeros(0, bool))
