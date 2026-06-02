@@ -8,9 +8,10 @@ import numpy as np
 
 from .imaging import footprint, PIX_UM
 from .psf import psf_sigmas_um
+from .params import DEFAULTS
 
-AXIAL_DETECT = 0.5
-PURITY_THRESH = 0.70
+AXIAL_DETECT = DEFAULTS.axial_detect
+PURITY_THRESH = DEFAULTS.purity_thresh
 
 
 def image_labeled(scene, labeled_mask, na, z0, pix_um=PIX_UM):
@@ -49,16 +50,36 @@ def score_boutons(scene, labeled_mask, total, fps, na, z0,
     return det, res
 
 
-def sweep(scene, densities, nas, rng, z0=None):
-    """Sweep labeling density x NA. Returns a list of result dicts."""
+def operating_point(scene, params, rng, z0=None):
+    """Image + score one (na, density) operating point from a SimParams.
+
+    Returns a dict ready to hand back to a GUI (counts + resolvable fraction).
+    """
     if z0 is None:
-        z0 = scene.default_plane()
+        z0 = params.z0_um if params.z0_um is not None else scene.default_plane()
+    mask = rng.random(len(scene.axons)) < params.density
+    total, fps = image_labeled(scene, mask, params.na, z0, params.pix_um)
+    det, res = score_boutons(scene, mask, total, fps, params.na, z0,
+                             params.axial_detect, params.purity_thresh, params.pix_um)
+    return dict(na=params.na, density=params.density, z0=z0,
+                labeled_axons=int(mask.sum()), detected=det, resolvable=res,
+                resolvable_frac=(res / det if det else float("nan")))
+
+
+def sweep(scene, densities, nas, rng, z0=None, params=DEFAULTS):
+    """Sweep labeling density x NA. Returns a list of result dicts.
+
+    Fixed knobs (pixel size, thresholds) are taken from `params`.
+    """
+    if z0 is None:
+        z0 = params.z0_um if params.z0_um is not None else scene.default_plane()
     rows = []
     for na in nas:
         for dens in densities:
             mask = rng.random(len(scene.axons)) < dens
-            total, fps = image_labeled(scene, mask, na, z0)
-            det, res = score_boutons(scene, mask, total, fps, na, z0)
+            total, fps = image_labeled(scene, mask, na, z0, params.pix_um)
+            det, res = score_boutons(scene, mask, total, fps, na, z0,
+                                     params.axial_detect, params.purity_thresh, params.pix_um)
             rows.append(dict(na=na, density=dens, labeled_axons=int(mask.sum()),
                              detected=det, resolvable=res,
                              resolvable_frac=(res / det if det else float("nan"))))

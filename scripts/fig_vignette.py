@@ -21,7 +21,7 @@ OUT = "figures/vignette.png"
 
 def main():
     rng = np.random.default_rng(0)
-    scene = build_scene(crop_um=20.0, rng=rng)
+    scene = build_scene(rng=rng)
     data = [(sid, v, b) for sid, v, b in scene.axons if len(b)]
 
     cent = np.array([v[:, :2].mean(0) for _, v, _ in data])

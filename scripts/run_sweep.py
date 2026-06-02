@@ -9,7 +9,7 @@ from synsim import build_scene, sweep
 
 def main():
     rng = np.random.default_rng(0)
-    scene = build_scene(crop_um=20.0, rng=rng)
+    scene = build_scene(rng=rng)
     print(f"crop {scene.crop_um:.0f} um: {len(scene.axons)} axons | "
           f"length {scene.total_length_um:.0f} um | boutons {scene.n_boutons} | "
           f"synapses/um {scene.synapses_per_um:.3f} (target 0.233)")

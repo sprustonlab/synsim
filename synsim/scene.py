@@ -3,6 +3,7 @@ import numpy as np
 
 from .data import load_crop
 from .boutons import skeleton_and_boutons
+from .params import DEFAULTS
 
 
 class Scene:
@@ -32,13 +33,16 @@ class Scene:
         return float(bz[np.argmax([(np.abs(bz - z) <= 1.0).sum() for z in bz])])
 
 
-def build_scene(crop_um=20.0, rng=None, kind="axons", data_dir=None):
-    """Load a crop and place boutons on every axon. Returns a Scene."""
+def build_scene(rng=None, params=None, kind="axons", data_dir=None):
+    """Load a crop and place boutons on every axon, per `params`. Returns a Scene."""
+    params = params if params is not None else DEFAULTS
     rng = rng if rng is not None else np.random.default_rng(0)
-    axons, lo, hi = load_crop(kind, crop_um, data_dir=data_dir)
+    axons, lo, hi = load_crop(kind, params.crop_um, data_dir=data_dir)
     out, total = [], 0.0
     for sid, v in axons:
-        length, b = skeleton_and_boutons(v, rng)
+        length, b = skeleton_and_boutons(v, rng,
+                                         spacing_um=params.bouton_spacing_um,
+                                         jitter=params.bouton_jitter)
         total += length
         out.append((sid, v, b))
-    return Scene(out, lo, hi, total, crop_um)
+    return Scene(out, lo, hi, total, params.crop_um)

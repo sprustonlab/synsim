@@ -9,8 +9,9 @@ import numpy as np
 from scipy import ndimage
 
 from .psf import psf_sigmas_um
+from .params import DEFAULTS
 
-PIX_UM = 0.15                # sim image pixel size
+PIX_UM = DEFAULTS.pix_um      # sim image pixel size (default; override per call)
 
 
 def footprint(v_um, lo_xy, na, z0, crop_um, pix_um=PIX_UM):
