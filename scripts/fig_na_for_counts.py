@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 from synsim import DEFAULTS, build_scene, evaluate
 
-DENSITIES = np.linspace(0.01, 0.30, 15)
+DENSITIES = np.linspace(0.01, 0.60, 20)
 NA_GRID = np.round(np.arange(0.30, 1.001, 0.05), 3)
 REGIONS = list(range(1, 11))
 TARGETS = [(1000, "tab:blue"), (2000, "tab:orange"), (4000, "tab:green")]
