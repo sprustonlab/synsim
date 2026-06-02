@@ -5,13 +5,12 @@ presynaptic axon is whether MORE THAN ONE BOUTON sits in the same resolved spot 
 not how much axon membrane is nearby. The emitters are therefore the BOUTONS
 (each tagged by its parent axon), not the axon membrane.
 
-We image a SINGLE optical section at the center of the FOV in z. Every labeled
-bouton inside the FOV interior (FOV minus edge margins) is read at that plane:
-the bouton-signal is evaluated at (x_bouton, y_bouton, z_center) - lateral at the
-bouton, axial at the focal plane (so a bouton off the central plane is defocused).
-A bouton is RESOLVABLE if its parent axon's own bouton(s) supply more than
-`purity_thresh` of the PSF-weighted bouton-signal there, i.e. no other axon's
-bouton falls within the resolved spot.
+We image a SINGLE optical section at the center of the FOV in z. Its thickness is
+the axial PSF FWHM (~4 um at NA 0.6): a bouton is IMAGED only if it lies within
++/- FWHM/2 of the central plane. Each imaged, interior bouton is read at the plane
+(lateral at the bouton, axial at the focal plane). A bouton is RESOLVABLE if its
+parent axon's own bouton(s) supply more than `purity_thresh` of the PSF-weighted
+bouton-signal there, i.e. no other axon's bouton falls within the resolved spot.
 
 Implementation: scale coordinates by (1/sigma_xy, 1/sigma_xy, 1/sigma_z) so the
 PSF is isotropic, build a KD-tree over labeled BOUTONS, and for each scored
@@ -53,8 +52,11 @@ def evaluate(scene, labeled_mask, params):
     lo = scene.origin
     fov = scene.fov
     z_plane = lo[2] + fov[2] / 2.0
+    half_section = 1.17741 * s_z          # FWHM/2: optical-section half-thickness (~2 um at NA 0.6)
 
-    # interior boutons of labeled axons, all read at the central plane
+    # boutons that are (a) imaged - within the optical section of the central
+    # plane - and (b) interior - outside the xy/z edge margins (truncated
+    # neighborhood); read at the plane
     ex, ez = params.edge_xy_um, params.edge_z_um
     bpos, bpar = [], []
     for i, (sid, v, b) in enumerate(scene.axons):
@@ -63,7 +65,8 @@ def evaluate(scene, labeled_mask, params):
         rel = b - lo
         inside = ((rel[:, 0] >= ex) & (rel[:, 0] <= fov[0] - ex) &
                   (rel[:, 1] >= ex) & (rel[:, 1] <= fov[1] - ex) &
-                  (rel[:, 2] >= ez) & (rel[:, 2] <= fov[2] - ez))
+                  (rel[:, 2] >= ez) & (rel[:, 2] <= fov[2] - ez) &
+                  (np.abs(b[:, 2] - z_plane) <= half_section))     # in the optical section
         for bb in b[inside]:
             bpos.append(np.array([bb[0], bb[1], z_plane]) * scale)   # read at the focal plane
             bpar.append(i)
