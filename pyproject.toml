@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synsim"
+version = "0.1.0"
+description = "Simulation of sparse 2P axon imaging against LICONN ground truth"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-image",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+extract = ["cloud-volume"]
+
+[tool.setuptools]
+packages = ["synsim"]

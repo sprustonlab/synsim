@@ -14,7 +14,7 @@ from cloudvolume import CloudVolume
 SRC = "precomputed://gs://liconn-public/ExPID82_1/segmentation/231030_agg_240123"
 DEND_LIST = ("https://storage.googleapis.com/liconn-public/"
              "ExPID82_1/segmentation/231030_agg_240123/dendrites.txt")
-OUT = Path("data/dends")
+OUT = Path(__file__).resolve().parent.parent / "data" / "dends"
 CHUNK = 200
 
 
