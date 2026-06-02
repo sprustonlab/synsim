@@ -88,6 +88,7 @@ count; the overlap question reduces to axon separability.
 | Field of view | **FOV axial z (um)** | 2–19 (19) | imaged box depth → 1,2,3 |
 | Field of view | **Exclude edge xy (um)** | 0–15 (3) | drop boundary boutons → 3,4 |
 | Field of view | **Exclude edge z (um)** | 0–15 (5) | drop boundary boutons → 3,4 |
+| Field of view | **Region (sub-volume)** | 0–50 (0) | 0=center, else random neighborhood → 1,3,4 |
 | Imaging | **Pixel size (um)** | 0.05–0.5 (0.15) | display section sampling → 1 |
 | Metric | **Purity threshold** | 0.5–1.0 (0.70) | resolvable cutoff → 1,3,4 |
 

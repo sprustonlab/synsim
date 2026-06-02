@@ -35,6 +35,9 @@ class SimParams:
                            "Don't score boutons within this xy margin (truncated PSF neighborhood).")
     edge_z_um: float = _f(5.0, "Exclude edge (z)", 0.0, 15.0, 0.5, "um", "Field of view",
                           "Don't score boutons within this z margin (axial PSF is large).")
+    region: float = _f(0.0, "Region (sub-volume)", 0.0, 50.0, 1.0, "", "Field of view",
+                       "Which neighborhood to image: 0 = volume center; other integers pick "
+                       "a different reproducible random sub-volume.")
     # --- Imaging ---
     pix_um: float = _f(0.15, "Pixel size", 0.05, 0.5, 0.05, "um", "Imaging",
                        "Sim image pixel size (display sections only).")

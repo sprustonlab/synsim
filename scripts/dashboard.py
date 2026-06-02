@@ -41,7 +41,8 @@ LUTS = _make_luts()
 
 
 def get_scene(params):
-    key = (params.fov_xy_um, params.fov_z_um, params.bouton_spacing_um, params.bouton_jitter)
+    key = (params.fov_xy_um, params.fov_z_um, params.bouton_spacing_um,
+           params.bouton_jitter, int(round(params.region)))
     if key not in _SCENE_CACHE:
         _SCENE_CACHE[key] = build_scene(rng=np.random.default_rng(0), params=params)
     return _SCENE_CACHE[key]

@@ -30,12 +30,13 @@ def voxel_downsample(v_um, ds_um):
     return (cells + 0.5) * ds_um
 
 
-def load_fov(kind="axons", fov_xy_um=30.0, fov_z_um=19.0, min_pts=50, data_dir=None):
-    """Objects with >= min_pts vertices inside a 3D FOV box centered in the volume.
+def load_fov(kind="axons", fov_xy_um=30.0, fov_z_um=19.0, min_pts=50, data_dir=None, region=0):
+    """Objects with >= min_pts vertices inside a 3D FOV box.
 
-    Returns (objects, origin_xyz, fov_xyz) where objects is a list of
-    (id, verts_um) holding only the in-box vertices, origin is the box min corner,
-    and fov_xyz = (fov_xy, fov_xy, fov_z).
+    region=0 centers the box on the volume (lateral centroid, z midpoint). Any
+    other integer places the box on a reproducible random sub-volume (the box is
+    kept inside the volume bounds). Returns (objects, origin_xyz, fov_xyz) where
+    objects is a list of (id, verts_um) holding only the in-box vertices.
     """
     mn = np.array([np.inf] * 3)
     mx = np.array([-np.inf] * 3)
@@ -45,9 +46,18 @@ def load_fov(kind="axons", fov_xy_um=30.0, fov_z_um=19.0, min_pts=50, data_dir=N
         mx = np.maximum(mx, v.max(0))
         sx += v[:, 0].sum(); sy += v[:, 1].sum(); n += v.shape[0]
     cx, cy = sx / n, sy / n
-    zc = 0.5 * (mn[2] + mx[2])
     fov = np.array([fov_xy_um, fov_xy_um, fov_z_um])
-    origin = np.array([cx - fov_xy_um / 2, cy - fov_xy_um / 2, zc - fov_z_um / 2])
+    region = int(round(region))
+    if region == 0:
+        origin = np.array([cx - fov_xy_um / 2, cy - fov_xy_um / 2,
+                           0.5 * (mn[2] + mx[2]) - fov_z_um / 2])
+    else:
+        rng = np.random.default_rng(region)
+        lo_bound = mn
+        hi_bound = mx - fov                      # so the box stays inside the volume
+        origin = np.where(hi_bound > lo_bound,
+                          lo_bound + rng.random(3) * np.maximum(hi_bound - lo_bound, 0),
+                          0.5 * (mn + mx - fov))  # axis smaller than fov -> centered
     hi = origin + fov
     out = []
     for sid, v in iter_objects(kind, data_dir):

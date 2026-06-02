@@ -35,7 +35,8 @@ def build_scene(rng=None, params=None, kind="axons", data_dir=None, ds_um=DS_UM)
     """Load a FOV box and place boutons on every axon, per `params`. Returns a Scene."""
     params = params if params is not None else DEFAULTS
     rng = rng if rng is not None else np.random.default_rng(0)
-    objs, origin, fov = load_fov(kind, params.fov_xy_um, params.fov_z_um, data_dir=data_dir)
+    objs, origin, fov = load_fov(kind, params.fov_xy_um, params.fov_z_um,
+                                 data_dir=data_dir, region=params.region)
     out, total = [], 0.0
     for sid, v in objs:
         length, b = skeleton_and_boutons(v, rng,
