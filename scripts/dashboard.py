@@ -214,21 +214,28 @@ function redraw(){
 function drawHist(){
  if(!last||!last.hist) return;
  const cv=document.getElementById('hist'), ctx=cv.getContext('2d');
- const W=cv.width,H=cv.height,pad=26,n=last.hist.length,mx=Math.max(...last.hist,1);
+ const W=cv.width,H=cv.height,L=40,R=12,T=12,B=26;
+ const pw=W-L-R, ph=H-T-B, n=last.hist.length, mx=Math.max(...last.hist,1);
  ctx.clearRect(0,0,W,H);
- const bw=(W-2*pad)/n;
+ ctx.fillStyle='#0f1217'; ctx.fillRect(L,T,pw,ph);          // plot area
+ const bw=pw/n;
  for(let i=0;i<n;i++){
-   const center=(i+0.5)/n, bh=(last.hist[i]/mx)*(H-2*pad);
+   const center=(i+0.5)/n, bh=(last.hist[i]/mx)*ph;
    ctx.fillStyle = center>=last.thr ? '#39c463' : '#e0564a';
-   ctx.fillRect(pad+i*bw, H-pad-bh, bw-1, bh);
+   ctx.fillRect(L+i*bw, T+ph-bh, Math.max(1,bw-1), bh);
  }
- const tx=pad+last.thr*(W-2*pad);
- ctx.strokeStyle='#cdd3da'; ctx.setLineDash([4,3]); ctx.beginPath();
- ctx.moveTo(tx,8); ctx.lineTo(tx,H-pad); ctx.stroke(); ctx.setLineDash([]);
- ctx.fillStyle='#8b94a3'; ctx.font='11px system-ui';
- ctx.fillText('purity 0  →  1   (threshold '+last.thr.toFixed(2)+
-   (last.median!=null?(',  median '+last.median.toFixed(2)):'')+')', pad, H-9);
- ctx.fillText('count', 2, 14);
+ ctx.strokeStyle='#46505d'; ctx.lineWidth=1;                // axes
+ ctx.beginPath(); ctx.moveTo(L,T); ctx.lineTo(L,T+ph); ctx.lineTo(L+pw,T+ph); ctx.stroke();
+ const tx=L+last.thr*pw;                                    // threshold line
+ ctx.strokeStyle='#f0f3f7'; ctx.setLineDash([4,3]);
+ ctx.beginPath(); ctx.moveTo(tx,T); ctx.lineTo(tx,T+ph); ctx.stroke(); ctx.setLineDash([]);
+ ctx.fillStyle='#c4ccd6'; ctx.font='11px system-ui';        // labels (light)
+ ctx.textAlign='center';
+ [0,0.25,0.5,0.75,1].forEach(v=>ctx.fillText(v.toFixed(2), L+v*pw, H-9));
+ ctx.textAlign='right'; ctx.fillText(mx, L-4, T+10); ctx.fillText('0', L-4, T+ph);
+ ctx.textAlign='left'; ctx.fillStyle='#f0f3f7';
+ ctx.fillText('thr '+last.thr.toFixed(2)+(last.median!=null?'   median '+last.median.toFixed(2):''), tx+5, T+11);
+ ctx.textAlign='left';
 }
 init();
 </script></body></html>"""
