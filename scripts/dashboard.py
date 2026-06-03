@@ -57,17 +57,21 @@ def run(params):
     norm = (img / mx if mx > 0 else img).astype("<f4")                    # little-endian f32
     lo, fov = scene.origin, scene.fov
 
-    pos, res = r["positions"], r["resolved"]
+    pos, res, pur = r["positions"], r["resolved"], r["purity"]
     rel = (pos[:, :2] - lo[:2]) if len(pos) else np.zeros((0, 2))
+    hist = (np.histogram(pur, bins=25, range=(0.0, 1.0))[0].tolist()
+            if len(pur) else [0] * 25)
 
     return {
         "img": base64.b64encode(norm.tobytes(order="C")).decode(),
         "nx": int(img.shape[0]), "ny": int(img.shape[1]),
         "fov": [float(fov[0]), float(fov[1])],
-        "edge_xy": params.edge_xy_um,
+        "edge_xy": params.edge_xy_um, "purity_thresh": params.purity_thresh,
         "bx": rel[:, 0].round(3).tolist(),
         "by": rel[:, 1].round(3).tolist(),
         "bres": [int(x) for x in res.tolist()],
+        "hist": hist,
+        "median_purity": (float(np.median(pur)) if len(pur) else None),
         "labeled_axons": r["labeled_axons"], "scored": r["scored"],
         "resolvable": r["resolvable"],
         "resolvable_frac": (None if r["scored"] == 0 else r["resolvable_frac"]),
@@ -76,30 +80,50 @@ def run(params):
 
 
 INDEX = r"""<!doctype html><html><head><meta charset=utf-8>
-<title>Sparse axon imaging - synsim</title>
+<title>synsim - sparse axon imaging</title>
 <style>
- body{font:14px system-ui,sans-serif;margin:0;display:flex;height:100vh}
- #controls{width:340px;padding:16px;overflow:auto;border-right:1px solid #ddd;background:#fafafa}
- #view{flex:1;padding:16px;display:flex;flex-direction:column;gap:10px;align-items:center}
- h1{font-size:16px;margin:0 0 12px} h2{font-size:12px;text-transform:uppercase;color:#888;margin:14px 0 6px}
- .ctl{margin:8px 0} .ctl label{display:flex;justify-content:space-between;font-size:13px}
- .ctl input[type=range]{width:100%} .val{color:#06c;font-variant-numeric:tabular-nums}
- .desc{color:#999;font-size:11px;margin-top:2px}
- select{width:100%}
- #cv{border:1px solid #ccc;background:#000;image-rendering:pixelated}
- #nums{display:grid;grid-template-columns:auto auto;gap:4px 18px;font-variant-numeric:tabular-nums}
- #nums .k{color:#666} #big{font-size:28px;font-weight:600;color:#06c}
- #busy{position:fixed;top:8px;right:12px;color:#c60;display:none}
+ :root{--accent:#3b82f6;--ok:#16a34a;--bad:#dc2626;--bg:#0f1217;--panel:#171b22;--ink:#e8eaed;--mut:#8b94a3;--line:#2a313c}
+ *{box-sizing:border-box}
+ body{font:13px/1.4 system-ui,sans-serif;margin:0;display:flex;height:100vh;background:var(--bg);color:var(--ink)}
+ #controls{width:330px;flex:none;padding:18px;overflow:auto;background:var(--panel);border-right:1px solid var(--line)}
+ #controls::-webkit-scrollbar{width:8px} #controls::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+ #view{flex:1;padding:22px;overflow:auto;display:flex;flex-direction:column;gap:16px;align-items:center}
+ h1{font-size:15px;margin:0 0 4px;letter-spacing:.3px}
+ .sub{color:var(--mut);font-size:11px;margin-bottom:14px}
+ h2{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);margin:18px 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+ .ctl{margin:9px 0} .ctl label{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px}
+ .ctl input[type=range]{width:100%;accent-color:var(--accent);height:18px}
+ .val{color:var(--accent);font-variant-numeric:tabular-nums;font-weight:600}
+ .desc{color:var(--mut);font-size:10.5px;margin-top:1px}
+ select{width:100%;background:#0f1217;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px}
+ input[type=checkbox]{accent-color:var(--accent)}
+ .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+ #stats{display:flex;gap:12px;width:100%;max-width:760px}
+ .stat{flex:1;text-align:center;padding:10px 6px}
+ .stat .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+ .stat .l{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+ #bigwrap .n{font-size:30px;color:var(--accent)}
+ #cv{border-radius:10px;background:#000;image-rendering:pixelated;display:block}
+ #hist{display:block;width:100%}
+ .panel-title{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+ #busy{position:fixed;top:12px;right:18px;background:var(--accent);color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;display:none;box-shadow:0 2px 8px rgba(0,0,0,.4)}
 </style></head><body>
 <div id=controls>
- <h1>synsim controls</h1>
+ <h1>synsim</h1><div class=sub>sparse 2P axon imaging vs LICONN</div>
  <div id=display></div>
  <div id=form></div>
 </div>
 <div id=view>
- <div id=big>-</div>
- <canvas id=cv width=560 height=560></canvas>
- <div id=nums></div>
+ <div id=stats>
+   <div class="card stat" id=bigwrap><div class=n id=big>-</div><div class=l>resolvable</div></div>
+   <div class="card stat"><div class=n id=s_scored>-</div><div class=l>synapses imaged</div></div>
+   <div class="card stat"><div class=n id=s_res>-</div><div class=l>resolvable</div></div>
+   <div class="card stat"><div class=n id=s_lab>-</div><div class=l>labeled axons</div></div>
+ </div>
+ <div class=card><div class=panel-title>central optical section</div>
+   <canvas id=cv width=720 height=720></canvas></div>
+ <div class=card style="width:100%;max-width:760px"><div class=panel-title>per-bouton purity distribution (current settings)</div>
+   <canvas id=hist width=720 height=190></canvas></div>
 </div>
 <div id=busy>computing...</div>
 <script>
@@ -114,7 +138,6 @@ async function init(){
 function buildDisplay(){
  const d=document.getElementById('display');
  d.innerHTML='<h2>Display</h2>';
- // LUT
  let o=Object.keys(luts).map(n=>`<option ${n=='gray'?'selected':''}>${n}</option>`).join('');
  d.insertAdjacentHTML('beforeend',
   `<div class=ctl><label>LUT</label><select id=d_lut>${o}</select></div>
@@ -155,15 +178,11 @@ async function update(){
  busy.style.display='block';
  const r=await (await fetch('/api/run?'+new URLSearchParams(vals))).json();
  if(r.error){ busy.textContent='error: '+r.error; return; }
- last={img:b64f32(r.img),nx:r.nx,ny:r.ny,fov:r.fov,edge:r.edge_xy,bx:r.bx,by:r.by,bres:r.bres};
- const pct=r.resolvable_frac==null?'n/a':(100*r.resolvable_frac).toFixed(1)+'%';
- big.textContent='resolvable: '+pct;
- nums.innerHTML=`<div class=k>axons in FOV</div><div>${r.n_axons}</div>
-   <div class=k>labeled axons</div><div>${r.labeled_axons}</div>
-   <div class=k>boutons scored</div><div>${r.scored}</div>
-   <div class=k>resolvable</div><div>${r.resolvable}</div>
-   <div class=k>synapses / um</div><div>${r.synapses_per_um.toFixed(3)}</div>`;
- redraw(); busy.style.display='none';
+ last={img:b64f32(r.img),nx:r.nx,ny:r.ny,fov:r.fov,edge:r.edge_xy,bx:r.bx,by:r.by,bres:r.bres,
+       hist:r.hist,thr:r.purity_thresh,median:r.median_purity};
+ big.textContent=r.resolvable_frac==null?'n/a':(100*r.resolvable_frac).toFixed(1)+'%';
+ s_scored.textContent=r.scored; s_res.textContent=r.resolvable; s_lab.textContent=r.labeled_axons;
+ redraw(); drawHist(); busy.style.display='none';
 }
 
 function redraw(){
@@ -176,21 +195,40 @@ function redraw(){
  for(let iy=0;iy<ny;iy++)for(let ix=0;ix<nx;ix++){
    let t=(img[ix*ny+iy]-disp.min)/span; t=t<0?0:t>1?1:t;
    const col=lut[Math.min(255,Math.max(0,Math.floor(t*255)))];
-   const p=(((ny-1-iy)*nx)+ix)*4;          // flip y -> origin lower-left
+   const p=(((ny-1-iy)*nx)+ix)*4;
    id.data[p]=col[0];id.data[p+1]=col[1];id.data[p+2]=col[2];id.data[p+3]=255;
  }
  oc.putImageData(id,0,0);
  c2.imageSmoothingEnabled=false; c2.clearRect(0,0,cv.width,cv.height);
  c2.drawImage(off,0,0,cv.width,cv.height);
- // edge-exclusion box
  const ex=edge/fov[0]*cv.width, ey=edge/fov[1]*cv.height;
- c2.strokeStyle='#0bf'; c2.setLineDash([4,4]); c2.lineWidth=1;
+ c2.strokeStyle='rgba(11,191,255,.7)'; c2.setLineDash([5,4]); c2.lineWidth=1;
  c2.strokeRect(ex,ey,cv.width-2*ex,cv.height-2*ey); c2.setLineDash([]);
  if(disp.boutons) for(let k=0;k<bx.length;k++){
    const px=bx[k]/fov[0]*cv.width, py=cv.height-(by[k]/fov[1]*cv.height);
-   c2.beginPath(); c2.arc(px,py,4,0,6.2832);
-   c2.strokeStyle=bres[k]?'#39ff14':'#ff3b30'; c2.lineWidth=1.4; c2.stroke();
+   c2.beginPath(); c2.arc(px,py,4.5,0,6.2832);
+   c2.strokeStyle=bres[k]?'#39ff77':'#ff4d4d'; c2.lineWidth=1.5; c2.stroke();
  }
+}
+
+function drawHist(){
+ if(!last||!last.hist) return;
+ const cv=document.getElementById('hist'), ctx=cv.getContext('2d');
+ const W=cv.width,H=cv.height,pad=26,n=last.hist.length,mx=Math.max(...last.hist,1);
+ ctx.clearRect(0,0,W,H);
+ const bw=(W-2*pad)/n;
+ for(let i=0;i<n;i++){
+   const center=(i+0.5)/n, bh=(last.hist[i]/mx)*(H-2*pad);
+   ctx.fillStyle = center>=last.thr ? '#39c463' : '#e0564a';
+   ctx.fillRect(pad+i*bw, H-pad-bh, bw-1, bh);
+ }
+ const tx=pad+last.thr*(W-2*pad);
+ ctx.strokeStyle='#cdd3da'; ctx.setLineDash([4,3]); ctx.beginPath();
+ ctx.moveTo(tx,8); ctx.lineTo(tx,H-pad); ctx.stroke(); ctx.setLineDash([]);
+ ctx.fillStyle='#8b94a3'; ctx.font='11px system-ui';
+ ctx.fillText('purity 0  →  1   (threshold '+last.thr.toFixed(2)+
+   (last.median!=null?(',  median '+last.median.toFixed(2)):'')+')', pad, H-9);
+ ctx.fillText('count', 2, 14);
 }
 init();
 </script></body></html>"""
