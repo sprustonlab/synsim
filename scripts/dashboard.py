@@ -14,8 +14,12 @@ Geometry knobs (FOV, bouton spacing/jitter) rebuild the scene (~15 s, cached);
 NA / density / edges / purity / pixel re-score the cached scene (fast).
 """
 import base64
+import hashlib
 import json
+import pickle
 import sys
+import time
+from pathlib import Path
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -25,6 +29,7 @@ import matplotlib
 from synsim import SimParams, ui_spec, build_scene, evaluate, section_image
 
 _SCENE_CACHE = {}
+CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache" / "scenes"
 
 
 def _make_luts():
@@ -41,11 +46,22 @@ LUTS = _make_luts()
 
 
 def get_scene(params):
+    """Scene cached in memory and on disk (keyed by the geometry knobs)."""
     key = (params.fov_xy_um, params.fov_z_um, params.bouton_spacing_um,
            params.bouton_jitter, int(round(params.region)))
-    if key not in _SCENE_CACHE:
-        _SCENE_CACHE[key] = build_scene(rng=np.random.default_rng(0), params=params)
-    return _SCENE_CACHE[key]
+    if key in _SCENE_CACHE:
+        return _SCENE_CACHE[key]
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    fpath = CACHE_DIR / ("scene_" + hashlib.md5(str(key).encode()).hexdigest()[:12] + ".pkl")
+    if fpath.exists():
+        with open(fpath, "rb") as f:
+            scene = pickle.load(f)
+    else:
+        scene = build_scene(rng=np.random.default_rng(0), params=params)
+        with open(fpath, "wb") as f:
+            pickle.dump(scene, f, protocol=pickle.HIGHEST_PROTOCOL)
+    _SCENE_CACHE[key] = scene
+    return scene
 
 
 def run(params):
@@ -273,7 +289,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-    print(f"synsim dashboard -> http://localhost:{port}  (first geometry change builds a scene, ~15 s)")
+    t = time.time()
+    get_scene(SimParams())                       # warm (build or load default scene)
+    print(f"default scene ready in {time.time()-t:.1f} s (cached at {CACHE_DIR})", flush=True)
+    print(f"synsim dashboard -> http://localhost:{port}", flush=True)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
 
 
