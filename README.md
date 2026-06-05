@@ -20,13 +20,17 @@ python run.py                 # static dashboard at http://localhost:8000 (opens
 and installing the scientific dependencies if they are missing:
 
 ```bash
-python run.py --live          # full dashboard; installs deps as needed
+python run.py --live          # full dashboard; installs deps + downloads data
 python run.py --live 8080     # ... on a custom port
+python run.py --fetch-data    # only download the LICONN geometry cache, then exit
 python run.py --no-browser    # don't auto-open a browser
 ```
 
-Live mode additionally needs the LICONN geometry cache under `data/` (see below);
-without it, use the static mode, which is fully self-contained.
+The full dashboard needs the LICONN geometry cache under `data/`. If it is
+missing, `--live` downloads it automatically from the **public**
+`gs://liconn-public` bucket using the repo's `scripts/extract_*.py` (via
+`cloud-volume`, installed on demand; resumable, ~11 min total). Pass `--no-fetch`
+to skip this. The static mode needs none of it.
 
 ## Live demo (no install)
 
@@ -51,8 +55,9 @@ python scripts/dashboard.py            # http://localhost:8000
 python scripts/dashboard.py 8080       # custom port
 ```
 
-Scene-building reads an extracted LICONN geometry cache under `data/` (produced
-by `scripts/extract_*.py`); that cache is not included here.
+Scene-building reads an extracted LICONN geometry cache under `data/`. It is not
+committed to the repo, but `python run.py --fetch-data` (or `--live`) downloads
+it from the public `gs://liconn-public` bucket via `scripts/extract_*.py`.
 
 ## Regenerating the static site
 
