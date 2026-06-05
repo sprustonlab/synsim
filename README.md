@@ -5,6 +5,29 @@ LICONN ground-truth geometry, and asks how well individual presynaptic boutons
 can be **resolved** as a function of numerical aperture, labeling density, and
 the scoring criteria.
 
+## Download and run locally (one command)
+
+Clone the repo and run the launcher - standard library only, nothing to install
+for the static dashboard:
+
+```bash
+git clone https://github.com/sprustonlab/synsim.git
+cd synsim
+python run.py                 # static dashboard at http://localhost:8000 (opens a browser)
+```
+
+`run.py` also drives the full interactive dashboard, checking the Python version
+and installing the scientific dependencies if they are missing:
+
+```bash
+python run.py --live          # full dashboard; installs deps as needed
+python run.py --live 8080     # ... on a custom port
+python run.py --no-browser    # don't auto-open a browser
+```
+
+Live mode additionally needs the LICONN geometry cache under `data/` (see below);
+without it, use the static mode, which is fully self-contained.
+
 ## Live demo (no install)
 
 A fully static build of the dashboard is published via GitHub Pages:
