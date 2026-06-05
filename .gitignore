@@ -24,3 +24,7 @@ Thumbs.db
 # Tooling / session state
 .operon/
 .claude/
+
+# Internal planning docs (kept local, not published)
+Context/
+docs/sim_plan.md

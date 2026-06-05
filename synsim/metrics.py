@@ -41,7 +41,7 @@ def evaluate(scene, labeled_mask, params):
             tags.append(np.full(len(b), i))
     empty = dict(labeled_axons=int(np.sum(labeled_mask)), scored=0, resolvable=0,
                  resolvable_frac=float("nan"), positions=np.zeros((0, 3)),
-                 purity=np.zeros(0), resolved=np.zeros(0, bool))
+                 z_true=np.zeros(0), purity=np.zeros(0), resolved=np.zeros(0, bool))
     if not pts:
         return empty
     V = np.concatenate(pts)
@@ -58,7 +58,7 @@ def evaluate(scene, labeled_mask, params):
     # plane - and (b) interior - outside the xy/z edge margins (truncated
     # neighborhood); read at the plane
     ex, ez = params.edge_xy_um, params.edge_z_um
-    bpos, bpar = [], []
+    bpos, bpar, bz = [], [], []
     for i, (sid, v, b) in enumerate(scene.axons):
         if not labeled_mask[i] or len(b) == 0:
             continue
@@ -70,6 +70,7 @@ def evaluate(scene, labeled_mask, params):
         for bb in b[inside]:
             bpos.append(np.array([bb[0], bb[1], z_plane]) * scale)   # read at the focal plane
             bpar.append(i)
+            bz.append(bb[2])                                         # true z (for edge_z gating)
     if not bpos:
         return empty
     bpos = np.array(bpos)
@@ -90,7 +91,8 @@ def evaluate(scene, labeled_mask, params):
     return dict(labeled_axons=int(np.sum(labeled_mask)), scored=scored,
                 resolvable=int(resolved.sum()),
                 resolvable_frac=float(resolved.mean()),
-                positions=bpos / scale, purity=purity, resolved=resolved)
+                positions=bpos / scale, z_true=np.array(bz),
+                purity=purity, resolved=resolved)
 
 
 def operating_point(scene, params, rng):

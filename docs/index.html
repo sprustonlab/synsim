@@ -1,0 +1,232 @@
+<!doctype html><html><head><meta charset=utf-8>
+<title>synsim - sparse axon imaging (static)</title>
+<style>
+ :root{--accent:#3b82f6;--ok:#16a34a;--bad:#dc2626;--bg:#0f1217;--panel:#171b22;--ink:#e8eaed;--mut:#8b94a3;--line:#2a313c}
+ *{box-sizing:border-box}
+ body{font:13px/1.4 system-ui,sans-serif;margin:0;display:flex;height:100vh;background:var(--bg);color:var(--ink)}
+ #controls{width:330px;flex:none;padding:18px;overflow:auto;background:var(--panel);border-right:1px solid var(--line)}
+ #controls::-webkit-scrollbar{width:8px} #controls::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+ #view{flex:1;padding:22px;overflow:auto;display:flex;flex-direction:column;gap:16px;align-items:center}
+ h1{font-size:15px;margin:0 0 4px;letter-spacing:.3px}
+ .sub{color:var(--mut);font-size:11px;margin-bottom:14px}
+ h2{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);margin:18px 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+ .ctl{margin:9px 0} .ctl label{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px}
+ .ctl input[type=range]{width:100%;accent-color:var(--accent);height:18px}
+ .val{color:var(--accent);font-variant-numeric:tabular-nums;font-weight:600}
+ .desc{color:var(--mut);font-size:10.5px;margin-top:1px}
+ select{width:100%;background:#0f1217;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px}
+ input[type=checkbox]{accent-color:var(--accent)}
+ .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+ #stats{display:flex;gap:12px;width:100%;max-width:760px}
+ .stat{flex:1;text-align:center;padding:10px 6px}
+ .stat .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+ .stat .l{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+ #bigwrap .n{font-size:30px;color:var(--accent)}
+ #cv{border-radius:10px;background:#000;image-rendering:pixelated;display:block}
+ #hist{display:block;width:100%}
+ .panel-title{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+ #busy{position:fixed;top:12px;right:18px;background:var(--accent);color:#fff;padding:5px 12px;border-radius:20px;font-size:12px;display:none;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+ .fixed{font-size:11px;color:var(--mut);line-height:1.7}
+ .fixed b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+</style></head><body>
+<div id=controls>
+ <h1>synsim</h1><div class=sub>sparse 2P axon imaging vs LICONN &mdash; static build</div>
+ <div id=display></div>
+ <div id=form></div>
+ <h2>Fixed geometry</h2>
+ <div class=fixed id=fixed></div>
+</div>
+<div id=view>
+ <div id=stats>
+   <div class="card stat" id=bigwrap><div class=n id=big>-</div><div class=l>resolvable</div></div>
+   <div class="card stat"><div class=n id=s_scored>-</div><div class=l>synapses imaged</div></div>
+   <div class="card stat"><div class=n id=s_res>-</div><div class=l>resolvable</div></div>
+   <div class="card stat"><div class=n id=s_lab>-</div><div class=l>labeled axons</div></div>
+ </div>
+ <div class=card><div class=panel-title>central optical section</div>
+   <canvas id=cv width=720 height=720></canvas></div>
+ <div class=card style="width:100%;max-width:760px"><div class=panel-title>per-bouton purity distribution (current settings)</div>
+   <canvas id=hist width=720 height=190></canvas></div>
+</div>
+<div id=busy>loading...</div>
+<script>
+let meta=null, luts=null, gi={}, free={}, disp={lut:'gray',min:0,max:1,boutons:1};
+let cache={}, last=null, timer=null;
+
+async function init(){
+ meta=await (await fetch('meta.json')).json();
+ luts=await (await fetch('luts.json')).json();
+ for(const c of meta.grid_controls) gi[c.name]=nearest(grid(c.name), meta.defaults[c.name]);
+ for(const c of meta.free_controls) free[c.name]=meta.defaults[c.name];
+ buildDisplay(); buildGrid(); buildFree(); buildFixed(); update();
+}
+
+function grid(name){ return name=='na'?meta.na_grid:meta.density_grid; }
+function nearest(arr,v){ let bi=0,bd=1e9; arr.forEach((x,i)=>{const d=Math.abs(x-v); if(d<bd){bd=d;bi=i;}}); return bi; }
+
+function buildDisplay(){
+ const d=document.getElementById('display');
+ d.innerHTML='<h2>Display</h2>';
+ let o=Object.keys(luts).map(n=>`<option ${n=='gray'?'selected':''}>${n}</option>`).join('');
+ d.insertAdjacentHTML('beforeend',
+  `<div class=ctl><label>LUT</label><select id=d_lut>${o}</select></div>
+   <div class=ctl><label>min<span class=val id=v_min>0.00</span></label>
+     <input type=range id=d_min min=0 max=1 step=0.01 value=0></div>
+   <div class=ctl><label>max<span class=val id=v_max>1.00</span></label>
+     <input type=range id=d_max min=0 max=1 step=0.01 value=1></div>
+   <div class=ctl><label>show boutons<input type=checkbox id=d_bout checked></label></div>`);
+ d_lut.onchange=e=>{disp.lut=e.target.value;redraw();};
+ d_min.oninput=e=>{disp.min=+e.target.value;v_min.textContent=(+e.target.value).toFixed(2);redraw();};
+ d_max.oninput=e=>{disp.max=+e.target.value;v_max.textContent=(+e.target.value).toFixed(2);redraw();};
+ d_bout.onchange=e=>{disp.boutons=e.target.checked?1:0;redraw();};
+}
+
+// Grid knobs (na, density): the slider indexes the precomputed grid.
+function buildGrid(){
+ const form=document.getElementById('form');
+ const h=document.createElement('h2'); h.textContent='Operating point'; form.appendChild(h);
+ for(const c of meta.grid_controls){
+  const g=grid(c.name), idx=gi[c.name];
+  const d=document.createElement('div'); d.className='ctl';
+  d.innerHTML=`<label>${c.label}<span class=val id=p_${c.name}>${g[idx]}${c.unit?(' '+c.unit):''}</span></label>
+   <input type=range min=0 max=${g.length-1} step=1 value=${idx} id=i_${c.name}>
+   <div class=desc>${c.desc}</div>`;
+  form.appendChild(d);
+  d.querySelector('input').addEventListener('input',e=>{
+    gi[c.name]=parseInt(e.target.value);
+    document.getElementById('p_'+c.name).textContent=g[gi[c.name]]+(c.unit?(' '+c.unit):'');
+    clearTimeout(timer); timer=setTimeout(update,120);
+  });
+ }
+}
+
+// Free knobs (edges, purity threshold): pure client-side filters, no fetch.
+function buildFree(){
+ const form=document.getElementById('form');
+ const h=document.createElement('h2'); h.textContent='Scoring (live)'; form.appendChild(h);
+ for(const c of meta.free_controls){
+  const d=document.createElement('div'); d.className='ctl';
+  d.innerHTML=`<label>${c.label}<span class=val id=p_${c.name}>${free[c.name]}${c.unit?(' '+c.unit):''}</span></label>
+   <input type=range min=${c.min} max=${c.max} step=${c.step} value=${free[c.name]} id=i_${c.name}>
+   <div class=desc>${c.desc}</div>`;
+  form.appendChild(d);
+  d.querySelector('input').addEventListener('input',e=>{
+    free[c.name]=parseFloat(e.target.value);
+    document.getElementById('p_'+c.name).textContent=e.target.value+(c.unit?(' '+c.unit):'');
+    compute();
+  });
+ }
+}
+
+function buildFixed(){
+ const f=meta.fixed;
+ document.getElementById('fixed').innerHTML=
+  `FOV xy <b>${f.fov_xy_um}</b> um &nbsp; z <b>${f.fov_z_um}</b> um<br>`+
+  `bouton spacing <b>${f.bouton_spacing_um}</b> um &nbsp; jitter <b>${f.bouton_jitter}</b><br>`+
+  `region <b>${f.region}</b> &nbsp; pixel <b>${f.pix_um}</b> um<br>`+
+  `axons in FOV <b>${meta.n_axons}</b> &nbsp; <b>${meta.synapses_per_um}</b> syn/um<br>`+
+  `<span style="color:#6b7484">geometry is fixed in this shared build</span>`;
+}
+
+// Load one precomputed cell (PNG section + bouton JSON), cached.
+function loadCell(ni,di){
+ const key=ni+'_'+di;
+ if(cache[key]) return Promise.resolve(cache[key]);
+ const base='cells/n'+ni+'_d'+di;
+ const pj=fetch(base+'.json').then(r=>r.json());
+ const pi=new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=base+'.png'; });
+ return Promise.all([pi,pj]).then(([im,bd])=>{
+   const nx=meta.nx, ny=meta.ny;
+   const off=document.createElement('canvas'); off.width=ny; off.height=nx;
+   const oc=off.getContext('2d'); oc.drawImage(im,0,0);
+   const px=oc.getImageData(0,0,ny,nx).data;
+   const u8=new Uint8Array(nx*ny);
+   for(let k=0;k<nx*ny;k++) u8[k]=px[k*4];       // R channel; row-major = ix*ny+iy
+   return cache[key]={img:u8,nx,ny,bx:bd.bx,by:bd.by,bz:bd.bz,pur:bd.pur};
+ });
+}
+
+async function update(){
+ busy.style.display='block';
+ cell=await loadCell(gi.na,gi.density);
+ busy.style.display='none';
+ compute();
+}
+let cell=null;
+
+// Apply edge gates + purity threshold client-side, then render.
+function compute(){
+ if(!cell) return;
+ const fov=meta.fov, fovz=meta.fov_z;
+ const ex=free.edge_xy_um, ez=free.edge_z_um, thr=free.purity_thresh;
+ const bx=[], by=[], bres=[], pur=[];
+ for(let k=0;k<cell.bx.length;k++){
+   const x=cell.bx[k], y=cell.by[k], z=cell.bz[k];
+   if(x<ex||x>fov[0]-ex||y<ex||y>fov[1]-ex||z<ez||z>fovz-ez) continue;  // interior gate
+   bx.push(x); by.push(y); pur.push(cell.pur[k]); bres.push(cell.pur[k]>=thr?1:0);
+ }
+ const scored=pur.length;
+ const resolvable=bres.reduce((a,b)=>a+b,0);
+ const hist=new Array(25).fill(0);
+ for(const p of pur){ let b=Math.floor(p*25); if(b>24)b=24; if(b<0)b=0; hist[b]++; }
+ const median = scored? pur.slice().sort((a,b)=>a-b)[Math.floor((scored-1)/2)] : null;
+ last={img:cell.img,nx:cell.nx,ny:cell.ny,fov,edge:ex,bx,by,bres,hist,thr,median};
+ big.textContent = scored? (100*resolvable/scored).toFixed(1)+'%' : 'n/a';
+ s_scored.textContent=scored; s_res.textContent=resolvable;
+ s_lab.textContent=meta.labeled_axons[gi.density];
+ redraw(); drawHist();
+}
+
+function redraw(){
+ if(!last) return;
+ const {img,nx,ny,fov,edge,bx,by,bres}=last, lut=luts[disp.lut];
+ const cv=document.getElementById('cv'), c2=cv.getContext('2d');
+ const off=document.createElement('canvas'); off.width=nx; off.height=ny;
+ const oc=off.getContext('2d'), id=oc.createImageData(nx,ny);
+ const span=(disp.max-disp.min)||1e-6;
+ for(let iy=0;iy<ny;iy++)for(let ix=0;ix<nx;ix++){
+   let t=((img[ix*ny+iy]/255)-disp.min)/span; t=t<0?0:t>1?1:t;
+   const col=lut[Math.min(255,Math.max(0,Math.floor(t*255)))];
+   const p=(((ny-1-iy)*nx)+ix)*4;
+   id.data[p]=col[0];id.data[p+1]=col[1];id.data[p+2]=col[2];id.data[p+3]=255;
+ }
+ oc.putImageData(id,0,0);
+ c2.imageSmoothingEnabled=false; c2.clearRect(0,0,cv.width,cv.height);
+ c2.drawImage(off,0,0,cv.width,cv.height);
+ const ex=edge/fov[0]*cv.width, ey=edge/fov[1]*cv.height;
+ c2.strokeStyle='rgba(11,191,255,.7)'; c2.setLineDash([5,4]); c2.lineWidth=1;
+ c2.strokeRect(ex,ey,cv.width-2*ex,cv.height-2*ey); c2.setLineDash([]);
+ if(disp.boutons) for(let k=0;k<bx.length;k++){
+   const px=bx[k]/fov[0]*cv.width, py=cv.height-(by[k]/fov[1]*cv.height);
+   c2.beginPath(); c2.arc(px,py,4.5,0,6.2832);
+   c2.strokeStyle=bres[k]?'#39ff77':'#ff4d4d'; c2.lineWidth=1.5; c2.stroke();
+ }
+}
+
+function drawHist(){
+ if(!last||!last.hist) return;
+ const cv=document.getElementById('hist'), ctx=cv.getContext('2d');
+ const W=cv.width,H=cv.height,L=40,R=12,T=12,B=26;
+ const pw=W-L-R, ph=H-T-B, n=last.hist.length, mx=Math.max(...last.hist,1);
+ ctx.clearRect(0,0,W,H);
+ ctx.fillStyle='#0f1217'; ctx.fillRect(L,T,pw,ph);
+ const bw=pw/n;
+ for(let i=0;i<n;i++){
+   const center=(i+0.5)/n, bh=(last.hist[i]/mx)*ph;
+   ctx.fillStyle = center>=last.thr ? '#39c463' : '#e0564a';
+   ctx.fillRect(L+i*bw, T+ph-bh, Math.max(1,bw-1), bh);
+ }
+ ctx.strokeStyle='#46505d'; ctx.lineWidth=1;
+ ctx.beginPath(); ctx.moveTo(L,T); ctx.lineTo(L,T+ph); ctx.lineTo(L+pw,T+ph); ctx.stroke();
+ const tx=L+last.thr*pw;
+ ctx.strokeStyle='#f0f3f7'; ctx.setLineDash([4,3]);
+ ctx.beginPath(); ctx.moveTo(tx,T); ctx.lineTo(tx,T+ph); ctx.stroke(); ctx.setLineDash([]);
+ ctx.fillStyle='#c4ccd6'; ctx.font='11px system-ui';
+ ctx.textAlign='center';
+ [0,0.25,0.5,0.75,1].forEach(v=>ctx.fillText(v.toFixed(2), L+v*pw, H-9));
+ ctx.textAlign='right'; ctx.fillText(mx, L-4, T+10); ctx.fillText('0', L-4, T+ph);
+ ctx.textAlign='left'; ctx.fillStyle='#f0f3f7';
+ ctx.fillText('thr '+last.thr.toFixed(2)+(last.median!=null?'   median '+last.median.toFixed(2):''), tx+5, T+11);
+}
+init();
+</script></body></html>
